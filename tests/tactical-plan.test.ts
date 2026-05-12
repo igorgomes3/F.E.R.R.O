@@ -44,6 +44,15 @@ describe("tactical plan", () => {
     ]));
   });
 
+  it("does not prepare unavailable objectives outside the preparation window", () => {
+    const plan = createTacticalPlan(baseInput({
+      gameTimeSeconds: 300,
+      objectiveStates: [{ name: "dragão", spawnIn: "300 segundos", available: false }],
+    }));
+
+    expect(plan.intent).toBe("farm_safe");
+  });
+
   it("avoids fights when enemy threat is strong and an ally is dead", () => {
     const plan = createTacticalPlan(baseInput({
       enemyThreat: { championName: "Zed", score: 12, kda: "6/1/2", build: ["Youmuu"], majorItemCount: 2 },

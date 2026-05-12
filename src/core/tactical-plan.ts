@@ -76,7 +76,10 @@ function collectAvoidFightReasons(input: TacticalPlanInput, gameTime: number): T
 }
 
 function findSoonObjective(objectives: ObjectiveState[]): ObjectiveState | null {
-  return objectives.find((objective) => objective.available || /10|30|60|1 minuto|segundos/.test(objective.spawnIn)) ?? null;
+  return objectives.find((objective) => {
+    const spawnIn = objective.spawnIn.toLowerCase();
+    return objective.available || /^\s*(?:10|30|60) segundos\s*$/.test(spawnIn) || /^\s*1 minuto\s*$/.test(spawnIn);
+  }) ?? null;
 }
 
 function fallbackPlan(gameTime: number): TacticalPlan {
