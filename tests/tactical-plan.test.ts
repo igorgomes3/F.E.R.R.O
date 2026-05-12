@@ -29,4 +29,36 @@ describe("tactical plan", () => {
       expect.objectContaining({ kind: "fallback", confidence: "unknown" }),
     ]);
   });
+
+  it("prepares a neutral objective when it is spawning soon", () => {
+    const plan = createTacticalPlan(baseInput({
+      gameTimeSeconds: 540,
+      objectiveStates: [{ name: "dragão", spawnIn: "60 segundos", available: false }],
+    }));
+
+    expect(plan.intent).toBe("prepare_objective");
+    expect(plan.priority).toBe("medium");
+    expect(plan.summary).toContain("dragão");
+    expect(plan.reasons).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "objective", confidence: "estimated" }),
+    ]));
+  });
+
+  it("avoids fights when enemy threat is strong and an ally is dead", () => {
+    const plan = createTacticalPlan(baseInput({
+      enemyThreat: { championName: "Zed", score: 12, kda: "6/1/2", build: ["Youmuu"], majorItemCount: 2 },
+      enemyThreats: [{ championName: "Zed", score: 12, kda: "6/1/2", build: ["Youmuu"], majorItemCount: 2 }],
+      alliedDeaths: [{ championName: "Jinx", isEnemy: false, respawnAtSeconds: 645 }],
+      alliedPower: 8,
+      enemyPower: 13,
+    }));
+
+    expect(plan.intent).toBe("avoid_fight");
+    expect(plan.priority).toBe("high");
+    expect(plan.summary).toContain("evita luta");
+    expect(plan.reasons).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "threat", text: expect.stringContaining("Zed") }),
+      expect.objectContaining({ kind: "death", text: expect.stringContaining("Jinx") }),
+    ]));
+  });
 });
