@@ -5,6 +5,7 @@ import { registerIpcHandlers } from "./ipc/handlers";
 import { engine } from "./services/engine";
 import { checkPiper, getPiperDir, getVoicesDir } from "./services/piper-installer";
 import { getStartupState } from "./services/startup-state";
+import { getVoiceInputController } from "./services/voice-input-singleton";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -14,7 +15,7 @@ function log(...args: unknown[]) { console.log(TAG, ...args); }
 function warn(...args: unknown[]) { console.warn(TAG, ...args); }
 function err(...args: unknown[]) { console.error(TAG, ...args); }
 
-function createWindow(): void {
+async function createWindow(): Promise<void> {
   log("=== F.E.R.R.O Coach starting ===");
   log("Electron", process.versions.electron, "| Node", process.versions.node, "| Platform", process.platform);
 
@@ -83,6 +84,7 @@ function createWindow(): void {
 
   log("Registering IPC handlers...");
   registerIpcHandlers(mainWindow);
+  await getVoiceInputController()?.registerGlobalHotkeys();
   engine.setWindow(mainWindow);
 
   if (startupState.engineAutoStartAllowed) {
@@ -105,6 +107,10 @@ function createWindow(): void {
 }
 
 app.whenReady().then(createWindow);
+
+app.on("before-quit", () => {
+  getVoiceInputController()?.unregisterGlobalHotkeys();
+});
 
 app.on("window-all-closed", () => {
   log("All windows closed, quitting");

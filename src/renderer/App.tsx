@@ -6,6 +6,7 @@ import MatchAnalysis from "./pages/MatchAnalysis";
 import Messages from "./pages/Messages";
 import Settings from "./pages/Settings";
 import PiperSetup from "./pages/PiperSetup";
+import VoiceInputCaptureBridge from "./components/voice/VoiceInputCaptureBridge";
 
 export type TabId = "dashboard" | "match" | "messages" | "settings";
 
@@ -90,6 +91,7 @@ export default function App() {
 
   return (
     <AppShell activeTab={activeTab} onTabChange={setActiveTab} notice={piperRepairNotice}>
+      <VoiceInputCaptureBridge />
       {activeTab === "dashboard" && <Dashboard />}
       {activeTab === "match" && <MatchAnalysis />}
       {activeTab === "messages" && <Messages />}

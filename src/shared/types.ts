@@ -46,6 +46,10 @@ export interface EngineEvent {
 export type LLMProviderType = "none" | "zai" | "openai" | "gemini" | "custom";
 export type LLMProtocol = "chat_completions" | "responses";
 export type TTSProviderType = "piper" | "elevenlabs" | "system";
+export type VoiceInputMode = "push_to_talk" | "toggle";
+export type SttProviderType = "whisper_cpp";
+export type SttLanguage = "pt" | "en" | "auto";
+export type VoiceInputStatusState = "disabled" | "idle" | "recording" | "transcribing" | "routing" | "error";
 export type MessageMode = "serio" | "meme" | "puto";
 
 export interface LLMProviderConfig {
@@ -72,6 +76,7 @@ export interface FerroConfig {
     };
   };
   tts: {
+    enabled: boolean;
     activeProvider: TTSProviderType;
     volume: number;
     providers: {
@@ -87,6 +92,19 @@ export interface FerroConfig {
       system: {
         voice: string;
       };
+    };
+  };
+  voiceInput: {
+    enabled: boolean;
+    mode: VoiceInputMode;
+    pushToTalkHotkey: string;
+    toggleHotkey: string;
+    stt: {
+      provider: SttProviderType;
+      executablePath: string;
+      modelPath: string;
+      language: SttLanguage;
+      threads: number;
     };
   };
   coach: {
@@ -195,6 +213,42 @@ export interface PiperProgress {
   percent: number;
   message: string;
 }
+
+export interface WhisperStatus {
+  executableExists: boolean;
+  modelExists: boolean;
+  ready: boolean;
+  executablePath: string;
+  modelPath: string;
+}
+
+export interface WhisperProgress {
+  stage: "downloading_binary" | "extracting" | "downloading_model" | "verifying" | "done" | "error";
+  percent: number;
+  message: string;
+}
+
+export type SttErrorCode = "missing_executable" | "missing_model" | "empty_audio" | "empty_transcript" | "process_failed" | "timeout";
+export type SttResult =
+  | { ok: true; transcript: string; durationMs: number }
+  | { ok: false; errorCode: SttErrorCode; message: string };
+
+export interface VoiceInputStatus {
+  state: VoiceInputStatusState;
+  enabled: boolean;
+  mode: VoiceInputMode;
+  pushToTalkHotkey: string;
+  toggleHotkey: string;
+  whisper: WhisperStatus;
+  lastTranscript: string;
+  lastResultMessage: string;
+  errorMessage: string | null;
+}
+
+export type VoiceRouteResult =
+  | { ok: true; kind: "app_command"; command: "reset_memory" | "mute_tts" | "unmute_tts" | "status"; message: string }
+  | { ok: true; kind: "tactical_memory"; message: string; tacticalResult: TacticalCommandResult }
+  | { ok: false; kind: "error"; message: string };
 
 // ── Tactical Memory ─────────────────────────────────────
 

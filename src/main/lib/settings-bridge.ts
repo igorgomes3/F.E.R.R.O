@@ -45,8 +45,8 @@ export function populateEnvFromConfig(): void {
   process.env.OBJECTIVE_THIRTY_SECONDS_CALL_SECONDS = String(config.objectives.thirtySecondsCall);
   process.env.OBJECTIVE_TEN_SECONDS_CALL_SECONDS = String(config.objectives.tenSecondsCall);
 
-  // TTS — always enabled
-  process.env.TTS_ENABLED = "true";
+  // TTS
+  process.env.TTS_ENABLED = String(config.tts.enabled);
   process.env.TTS_PROVIDER =
     config.tts.activeProvider === "piper"
       ? "piper"

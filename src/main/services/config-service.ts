@@ -34,6 +34,7 @@ const DEFAULT_CONFIG: FerroConfig = {
     },
   },
   tts: {
+    enabled: true,
     activeProvider: "piper",
     volume: 0.8,
     providers: {
@@ -44,6 +45,19 @@ const DEFAULT_CONFIG: FerroConfig = {
       },
       elevenlabs: { apiKey: "", voiceId: "" },
       system: { voice: "Microsoft Maria Desktop" },
+    },
+  },
+  voiceInput: {
+    enabled: false,
+    mode: "push_to_talk",
+    pushToTalkHotkey: "Alt+Space",
+    toggleHotkey: "Alt+Shift+Space",
+    stt: {
+      provider: "whisper_cpp",
+      executablePath: path.join(FERROCONFIG_DIR, "whisper", "whisper-cli.exe"),
+      modelPath: "",
+      language: "pt",
+      threads: 4,
     },
   },
   coach: {

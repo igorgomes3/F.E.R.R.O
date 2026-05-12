@@ -3,6 +3,10 @@ import { IPC } from "../../shared/channels";
 import * as configService from "../services/config-service";
 import { engine } from "../services/engine";
 import { installPiper, PIPER_VOICES, getVoicesDir, getPiperDir } from "../services/piper-installer";
+import { installWhisper } from "../services/whisper-installer";
+import { VoiceInputController } from "../services/voice-input-controller";
+import { setVoiceInputController } from "../services/voice-input-singleton";
+import { routeVoiceCommand } from "../services/voice-command-router";
 import { listPiperVoices, listElevenLabsVoices, listSystemVoices } from "../services/voice-list-service";
 import { getLatestElevenLabsUsageSummary } from "../services/elevenlabs-usage-service";
 import { getStartupState } from "../services/startup-state";
@@ -10,8 +14,14 @@ import { populateEnvFromConfig } from "../lib/settings-bridge";
 import { createTextResponse } from "../../core/llm-client";
 import type { LLMProviderType } from "../../shared/types";
 import path from "path";
+import os from "os";
+import { randomUUID } from "crypto";
+import { mkdir, writeFile } from "fs/promises";
 
 const TAG = "[IPC]";
+const MAX_VOICE_RECORDING_BYTES = 10 * 1024 * 1024;
+const VOICE_RECORDING_DIR = path.join(os.tmpdir(), "ferro-voice");
+const pendingVoiceRecordings = new Set<string>();
 function log(...args: unknown[]) { console.log(TAG, ...args); }
 
 function safeAsciiPreview(text: string, maxLen = 30): string {
@@ -60,7 +70,61 @@ function emitConfigChanged(mainWindow: BrowserWindow, configPath: string, value:
   mainWindow.webContents.send(IPC.CONFIG_CHANGED, { path: configPath, value });
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function saveVoiceRecording(audio: unknown): Promise<{ ok: true; filePath: string } | { ok: false; error: string }> {
+  if (!(audio instanceof ArrayBuffer)) {
+    return { ok: false, error: "Audio invalido." };
+  }
+  const buffer = Buffer.from(audio);
+  if (buffer.byteLength === 0 || buffer.byteLength > MAX_VOICE_RECORDING_BYTES || !isWavRecording(buffer)) {
+    return { ok: false, error: "Audio invalido." };
+  }
+
+  await mkdir(VOICE_RECORDING_DIR, { recursive: true });
+  const filePath = path.join(VOICE_RECORDING_DIR, `voice-${Date.now()}-${randomUUID()}.wav`);
+  const resolvedPath = path.resolve(filePath);
+  await writeFile(resolvedPath, buffer);
+  pendingVoiceRecordings.add(resolvedPath);
+  return { ok: true, filePath: resolvedPath };
+}
+
+function isWavRecording(buffer: Buffer): boolean {
+  return buffer.byteLength >= 44 && buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WAVE";
+}
+
+function resolveVoiceRecordingPath(filePath: unknown): string | null {
+  if (typeof filePath !== "string") return null;
+  const resolvedPath = path.resolve(filePath);
+  const resolvedDir = path.resolve(VOICE_RECORDING_DIR);
+  if (!resolvedPath.startsWith(resolvedDir + path.sep)) return null;
+  if (!pendingVoiceRecordings.has(resolvedPath)) return null;
+  pendingVoiceRecordings.delete(resolvedPath);
+  return resolvedPath;
+}
+
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
+  const voiceInput = new VoiceInputController({
+    getConfig: () => ({ voiceInput: configService.getAll().voiceInput }),
+    route: (transcript) => routeVoiceCommand(transcript, {
+      resetTacticalMemory: () => engine.resetTacticalMemory(),
+      handleTacticalCommand: (text) => engine.handleTacticalCommand(text),
+      setTtsEnabled: (enabled) => {
+        configService.setPath("tts.enabled", enabled);
+        engine.syncConfig();
+        emitConfigChanged(mainWindow, "tts.enabled", enabled);
+      },
+      getStatusSummary: () => {
+        const state = engine.engineState;
+        return `Engine ${state.status}. Voz ${state.ttsStatus}. LLM ${state.llmStatus}.`;
+      },
+    }),
+    emit: (channel, payload) => mainWindow.webContents.send(channel, payload),
+  });
+  setVoiceInputController(voiceInput);
+
   // ── Config ──────────────────────────────────────────
   ipcMain.handle(IPC.CONFIG_GET, () => {
     return configService.getAll();
@@ -207,7 +271,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
       // Mutate cached settings to reflect current config
       configMod.settings.ttsProvider = ttsProvider;
-      configMod.settings.ttsEnabled = true;
+      configMod.settings.ttsEnabled = currentConfig.tts.enabled;
       configMod.settings.piperExecutable = currentConfig.tts.providers.piper.executablePath;
       configMod.settings.piperModelPath = currentConfig.tts.providers.piper.modelPath;
       configMod.settings.piperSpeaker = currentConfig.tts.providers.piper.speaker;
@@ -349,6 +413,57 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       console.error(TAG, "piper:install failed:", result.error);
     }
     return result;
+  });
+
+  // ── Voice Input ─────────────────────────────────────
+  ipcMain.handle(IPC.VOICE_INPUT_STATUS_GET, () => voiceInput.getStatus());
+
+  ipcMain.handle(IPC.VOICE_INPUT_SETTINGS_UPDATE, async (_e, configPath: string, value: unknown) => {
+    const wasRecording = voiceInput.getStatus().state === "recording";
+    configService.setPath(configPath, value);
+    engine.syncConfig();
+    emitConfigChanged(mainWindow, configPath, value);
+    if (wasRecording && configPath.startsWith("voiceInput.")) {
+      mainWindow.webContents.send(IPC.VOICE_INPUT_CAPTURE_CANCEL_REQUEST, { reason: "settings_changed" });
+    }
+    voiceInput.refreshState();
+    await voiceInput.registerGlobalHotkeys();
+    return voiceInput.getStatus();
+  });
+
+  ipcMain.handle(IPC.VOICE_INPUT_INSTALL, async () => {
+    const result = await installWhisper(mainWindow);
+    if (result.ok) {
+      configService.setPath("voiceInput.stt.executablePath", result.executablePath);
+      configService.setPath("voiceInput.stt.modelPath", result.modelPath);
+      emitConfigChanged(mainWindow, "voiceInput.stt.executablePath", result.executablePath);
+      emitConfigChanged(mainWindow, "voiceInput.stt.modelPath", result.modelPath);
+      voiceInput.refreshState();
+    }
+    return result;
+  });
+
+  ipcMain.handle(IPC.VOICE_INPUT_TEST_TRANSCRIBE, async () => {
+    const startStatus = await voiceInput.startRecording();
+    if (startStatus.state !== "recording") return startStatus;
+    await delay(300);
+    return voiceInput.stopRecording();
+  });
+
+  ipcMain.handle(IPC.VOICE_INPUT_START_RECORDING, () => voiceInput.beginExternalRecording());
+
+  ipcMain.handle(IPC.VOICE_INPUT_STOP_RECORDING, () => voiceInput.getStatus());
+
+  ipcMain.handle(IPC.VOICE_INPUT_CANCEL_RECORDING, () => voiceInput.cancelRecording());
+
+  ipcMain.handle(IPC.VOICE_INPUT_RECORDING_SAVE, (_e, audio: unknown) => saveVoiceRecording(audio));
+
+  ipcMain.handle(IPC.VOICE_INPUT_RECORDING_PROCESS, (_e, filePath: string, durationMs: number) => {
+    const resolvedPath = resolveVoiceRecordingPath(filePath);
+    if (!resolvedPath || typeof durationMs !== "number" || !Number.isFinite(durationMs) || durationMs < 0) {
+      return { ok: false, kind: "error", message: "Audio invalido." };
+    }
+    return voiceInput.processExternalRecording(resolvedPath, durationMs);
   });
 
   // ── System ──────────────────────────────────────────

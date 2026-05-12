@@ -122,7 +122,7 @@ export class Engine extends EventEmitter {
       objectiveOneMinuteCallSeconds: cfg.objectives.oneMinuteCall,
       objectiveThirtySecondsCallSeconds: cfg.objectives.thirtySecondsCall,
       objectiveTenSecondsCallSeconds: cfg.objectives.tenSecondsCall,
-      ttsEnabled: true,
+      ttsEnabled: cfg.tts.enabled,
       ttsProvider:
         cfg.tts.activeProvider === "piper"
           ? "piper"

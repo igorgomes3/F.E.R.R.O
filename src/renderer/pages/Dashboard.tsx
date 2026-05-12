@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { EngineState } from "../../shared/types";
 import LogPanel from "../components/dashboard/LogPanel";
 import TacticalMemoryPanel from "../components/dashboard/TacticalMemoryPanel";
+import VoiceInputStatusPanel from "../components/dashboard/VoiceInputStatusPanel";
 
 const DEFAULT_STATE: EngineState = {
   status: "idle",
@@ -129,6 +130,10 @@ export default function Dashboard() {
       {/* Tactical memory */}
       <div className="animate-in animate-in-delay-4 relative z-10 mt-8 w-full max-w-lg">
         <TacticalMemoryPanel />
+      </div>
+
+      <div className="animate-in animate-in-delay-4 relative z-10 mt-4 w-full max-w-lg">
+        <VoiceInputStatusPanel />
       </div>
 
       {/* Log panel */}

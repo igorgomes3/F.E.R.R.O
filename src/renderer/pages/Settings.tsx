@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FerroConfig } from "../../shared/types";
 import LLMProviderPanel from "../components/settings/LLMProviderPanel";
 import TTSProviderPanel from "../components/settings/TTSProviderPanel";
+import VoiceInputPanel from "../components/settings/VoiceInputPanel";
 
 export default function Settings() {
   const [config, setConfig] = useState<FerroConfig | null>(null);
@@ -50,6 +51,7 @@ export default function Settings() {
 
       <LLMProviderPanel config={config} onUpdate={updateConfig} />
       <TTSProviderPanel config={config} onUpdate={updateConfig} />
+      <VoiceInputPanel config={config} />
 
       {/* Volume */}
       <section className="space-y-4">

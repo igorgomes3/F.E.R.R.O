@@ -51,6 +51,25 @@ const api = {
   installPiper: (voiceId: string) => ipcRenderer.invoke(IPC.PIPER_INSTALL, voiceId),
   onPiperProgress: (cb: (data: unknown) => void) => sub(IPC.PIPER_PROGRESS, cb),
 
+  // Voice input
+  getVoiceInputStatus: () => ipcRenderer.invoke(IPC.VOICE_INPUT_STATUS_GET),
+  updateVoiceInputSetting: (path: string, value: unknown) => ipcRenderer.invoke(IPC.VOICE_INPUT_SETTINGS_UPDATE, path, value),
+  installWhisper: () => ipcRenderer.invoke(IPC.VOICE_INPUT_INSTALL),
+  testVoiceTranscription: () => ipcRenderer.invoke(IPC.VOICE_INPUT_TEST_TRANSCRIBE),
+  startVoiceRecording: () => ipcRenderer.invoke(IPC.VOICE_INPUT_START_RECORDING),
+  stopVoiceRecording: () => ipcRenderer.invoke(IPC.VOICE_INPUT_STOP_RECORDING),
+  cancelVoiceRecording: () => ipcRenderer.invoke(IPC.VOICE_INPUT_CANCEL_RECORDING),
+  saveVoiceRecording: (audio: ArrayBuffer) => ipcRenderer.invoke(IPC.VOICE_INPUT_RECORDING_SAVE, audio),
+  processVoiceRecording: (filePath: string, durationMs: number) => ipcRenderer.invoke(IPC.VOICE_INPUT_RECORDING_PROCESS, filePath, durationMs),
+  onVoiceInputStatus: (cb: (data: unknown) => void) => sub(IPC.VOICE_INPUT_STATUS_EVENT, cb),
+  onVoiceInputTranscript: (cb: (data: unknown) => void) => sub(IPC.VOICE_INPUT_TRANSCRIPT_EVENT, cb),
+  onVoiceInputResult: (cb: (data: unknown) => void) => sub(IPC.VOICE_INPUT_RESULT_EVENT, cb),
+  onVoiceInputError: (cb: (data: unknown) => void) => sub(IPC.VOICE_INPUT_ERROR_EVENT, cb),
+  onVoiceCaptureStartRequest: (cb: (data: unknown) => void) => sub(IPC.VOICE_INPUT_CAPTURE_START_REQUEST, cb),
+  onVoiceCaptureStopRequest: (cb: (data: unknown) => void) => sub(IPC.VOICE_INPUT_CAPTURE_STOP_REQUEST, cb),
+  onVoiceCaptureCancelRequest: (cb: (data: unknown) => void) => sub(IPC.VOICE_INPUT_CAPTURE_CANCEL_REQUEST, cb),
+  onWhisperProgress: (cb: (data: unknown) => void) => sub(IPC.VOICE_INPUT_INSTALL_PROGRESS, cb),
+
   // System
   selectDirectory: () => ipcRenderer.invoke(IPC.DIALOG_SELECT_DIR),
   getAppVersion: () => ipcRenderer.invoke(IPC.APP_VERSION),
