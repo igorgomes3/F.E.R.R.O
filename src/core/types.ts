@@ -128,7 +128,63 @@ export interface StrategicContext {
   enemyPower: number;
   scalingRead: string;
   objectiveStates: ObjectiveState[];
+  tacticalPlan?: TacticalPlan;
   tacticalMemory?: string;
+}
+
+export type TacticalPlanIntent =
+  | "fight"
+  | "avoid_fight"
+  | "prepare_objective"
+  | "trade_objective"
+  | "reset"
+  | "pressure_lane"
+  | "farm_safe";
+
+export type TacticalPlanPriority = "low" | "medium" | "high";
+export type TacticalPlanConfidence = "confirmed" | "estimated" | "unknown";
+
+export interface TacticalPlanReason {
+  kind: "objective" | "cooldown" | "death" | "threat" | "powerspike" | "lane" | "fallback";
+  text: string;
+  confidence: TacticalPlanConfidence;
+  weight: number;
+}
+
+export interface TacticalPlan {
+  intent: TacticalPlanIntent;
+  priority: TacticalPlanPriority;
+  summary: string;
+  reasons: TacticalPlanReason[];
+  confidence: TacticalPlanConfidence;
+  createdAtGameTimeSeconds: number;
+  expiresAtGameTimeSeconds?: number;
+}
+
+export interface TacticalPlanCooldownInput {
+  champion: string;
+  spell: string;
+  isEnemy: boolean;
+  confidence: "confirmed" | "estimated" | "expired" | "unknown";
+  readyAtSeconds: number;
+}
+
+export interface TacticalPlanDeathInput {
+  championName: string;
+  isEnemy: boolean;
+  respawnAtSeconds: number;
+}
+
+export interface TacticalPlanInput {
+  gameTimeSeconds: number;
+  objectiveStates: ObjectiveState[];
+  enemyThreat: EnemyThreat | null;
+  enemyThreats: EnemyThreat[];
+  alliedPower: number;
+  enemyPower: number;
+  alliedDeaths: TacticalPlanDeathInput[];
+  enemyDeaths: TacticalPlanDeathInput[];
+  cooldowns: TacticalPlanCooldownInput[];
 }
 
 export interface AnalyzeSnapshotResult {
