@@ -73,6 +73,42 @@ export default function TacticalMemoryPanel() {
     }
   };
 
+  const confirmed = cooldowns.filter((cooldown) => cooldown.confidence === "confirmed");
+  const estimated = cooldowns.filter((cooldown) => cooldown.confidence === "estimated");
+  const expired = cooldowns.filter((cooldown) => cooldown.confidence === "expired");
+  const unknown = cooldowns.filter((cooldown) => cooldown.confidence === "unknown");
+
+  const renderCooldownSection = (label: string, items: ChampionCooldown[]) => {
+    if (items.length === 0) return null;
+
+    return (
+      <div className="space-y-2">
+        <p className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+          {label}
+        </p>
+        {items.map((cooldown) => (
+          <div
+            key={cooldown.id}
+            className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm"
+            style={{ background: "var(--bg-input)", color: "var(--text-secondary)" }}
+          >
+            <span>
+              <span style={{ color: "var(--text-primary)" }}>{cooldown.champion}</span> {cooldown.spell}
+              {cooldown.baseCooldownSeconds !== cooldown.adjustedCooldownSeconds ? (
+                <span className="block text-xs" style={{ color: "var(--text-muted)" }}>
+                  ajustado de {formatClock(cooldown.baseCooldownSeconds)} para {formatClock(cooldown.adjustedCooldownSeconds)}
+                </span>
+              ) : null}
+            </span>
+            <span className="text-xs" style={{ color: cooldown.confidence === "expired" ? "var(--accent-green)" : "var(--text-muted)" }}>
+              {cooldown.confidence === "expired" ? "pronto" : `volta ${formatClock(cooldown.readyAtSeconds)}`}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <section className="card-glass w-full max-w-lg p-4">
       <div className="flex items-start justify-between gap-3">
@@ -132,21 +168,11 @@ export default function TacticalMemoryPanel() {
             Nenhum cooldown registrado.
           </p>
         ) : (
-          <div className="space-y-2">
-            {cooldowns.map((cooldown) => (
-              <div
-                key={`${cooldown.champion}:${cooldown.spell}`}
-                className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm"
-                style={{ background: "var(--bg-input)", color: "var(--text-secondary)" }}
-              >
-                <span>
-                  <span style={{ color: "var(--text-primary)" }}>{cooldown.champion}</span> {cooldown.spell}
-                </span>
-                <span className="text-xs" style={{ color: cooldown.confidence === "expired" ? "var(--accent-green)" : "var(--text-muted)" }}>
-                  {cooldown.confidence === "expired" ? "pronto" : `volta ${formatClock(cooldown.readyAtSeconds)}`}
-                </span>
-              </div>
-            ))}
+          <div className="space-y-3">
+            {renderCooldownSection("Confirmados", confirmed)}
+            {renderCooldownSection("Estimados", estimated)}
+            {renderCooldownSection("Prontos", expired)}
+            {renderCooldownSection("Outros", unknown)}
           </div>
         )}
       </div>

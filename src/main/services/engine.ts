@@ -1,7 +1,7 @@
 import { EventEmitter } from "events";
 import type { BrowserWindow } from "electron";
 import { IPC } from "../../shared/channels";
-import type { ChampionCooldown, EngineState, EngineStatus, EngineEvent, LogEntry, TacticalCommandResult } from "../../shared/types";
+import type { ChampionCooldown, EngineState, EngineStatus, EngineEvent, LogEntry, TacticalCommandResult, TacticalMemoryContext } from "../../shared/types";
 import { populateEnvFromConfig } from "../lib/settings-bridge";
 import * as configService from "./config-service";
 import { CATEGORY_PRIORITIES, COOLDOWN_GROUPS } from "../../core/constants";
@@ -41,10 +41,12 @@ let core: LoadedCore | null = null;
 export class Engine extends EventEmitter {
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private running = false;
+  private runToken = 0;
   private mainWindow: BrowserWindow | null = null;
   private state: LoopStateShape | null = null;
   private logger: CoreLogger | null = null;
   private readonly tacticalMemory = new TacticalMemory();
+  private latestTacticalContext: TacticalMemoryContext | undefined;
 
   public engineState: EngineState = {
     status: "idle",
@@ -151,7 +153,7 @@ export class Engine extends EventEmitter {
       return { ok: false, kind: "unknown", message: "Comando tatico invalido." };
     }
 
-    return this.tacticalMemory.handleText(text, this.currentTacticalGameTime());
+    return this.tacticalMemory.handleText(text, this.currentTacticalGameTime(), this.latestTacticalContext);
   }
 
   public listTacticalCooldowns(): ChampionCooldown[] {
@@ -162,8 +164,26 @@ export class Engine extends EventEmitter {
     this.tacticalMemory.reset();
   }
 
+  private updateTacticalContext(snapshot: GameSnapshot): void {
+    this.latestTacticalContext = {
+      enemyPlayers: snapshot.enemyPlayers.map((player) => {
+        const items = Array.isArray(player.items) ? player.items : [];
+
+        return {
+          championName: player.championName,
+          level: player.level,
+          items: items.map((item) => ({ id: item.id, name: item.name })),
+        };
+      }),
+    };
+  }
+
   private currentTacticalGameTime(): number {
     return this.engineState.gameDetected ? this.engineState.gameTime : 0;
+  }
+
+  private isRunActive(runToken: number): boolean {
+    return this.running && this.runToken === runToken;
   }
 
   private requireRuntime(): { core: LoadedCore; state: LoopStateShape; logger: CoreLogger } {
@@ -212,6 +232,7 @@ export class Engine extends EventEmitter {
   async start() {
     if (this.running) return;
     this.running = true;
+    this.runToken += 1;
     console.log("[Engine] Starting...");
 
     try {
@@ -244,9 +265,11 @@ export class Engine extends EventEmitter {
     if (!core || !this.state || !this.logger) return;
     if ((this as { _ticking?: boolean })._ticking) return;
     (this as { _ticking?: boolean })._ticking = true;
+    const runToken = this.runToken;
     try {
-      await this.tick();
+      await this.tick(runToken);
     } catch (err) {
+      if (!this.isRunActive(runToken)) return;
       console.error("[Engine] Tick error:", (err as Error).message);
       this.log({ type: "engine_error", message: (err as Error).message });
     } finally {
@@ -254,27 +277,32 @@ export class Engine extends EventEmitter {
     }
   }
 
-  private async tick() {
+  private async tick(runToken = this.runToken) {
     const { core: c, state: st, logger: lg } = this.requireRuntime();
 
     const snapshot = await c.getSnapshot((type, payload) => lg.logGame(type, payload));
+    if (!this.isRunActive(runToken)) return;
 
     // No game running
     if (!snapshot) {
       if (!st.hasLoggedWaitingState) {
         if (st.lastGameTime !== null) {
           await lg.log("game_ended", { lastGameTime: st.lastGameTime });
+          if (!this.isRunActive(runToken)) return;
           st.reset();
           this.tacticalMemory.reset();
+          this.latestTacticalContext = undefined;
           this.engineState.gameDetected = false;
           this.engineState.gameTime = 0;
           this.engineState.activeChampion = "";
           this.send({ type: "game_ended" });
         }
         await lg.log("waiting_for_game");
+        if (!this.isRunActive(runToken)) return;
         st.hasLoggedWaitingState = true;
         this.log({ type: "waiting_for_game" });
       }
+      if (!this.isRunActive(runToken)) return;
       this.setStatus("waiting_for_game");
       return;
     }
@@ -282,16 +310,19 @@ export class Engine extends EventEmitter {
     // Game detected for first time
     if (st.hasLoggedWaitingState) {
       await lg.newSession();
+      if (!this.isRunActive(runToken)) return;
       await lg.log("game_detected", {
         gameTime: snapshot.gameTime,
         activePlayer: snapshot.activePlayerName,
         champion: snapshot.activePlayerChampion,
       });
+      if (!this.isRunActive(runToken)) return;
       st.hasLoggedWaitingState = false;
       this.send({ type: "game_detected", champion: snapshot.activePlayerChampion, gameTime: snapshot.gameTime });
       this.log({ type: "game_detected", gameTime: snapshot.gameTime, message: `Partida detectada: ${snapshot.activePlayerChampion}` });
       console.log("[Engine] Game detected:", snapshot.activePlayerChampion);
     }
+    if (!this.isRunActive(runToken)) return;
 
     const gameTime = snapshot.gameTime;
     this.engineState.gameDetected = true;
@@ -303,10 +334,15 @@ export class Engine extends EventEmitter {
     if (st.detectGameReset(gameTime)) {
       st.reset();
       this.tacticalMemory.reset();
+      this.latestTacticalContext = undefined;
       await lg.newSession();
+      if (!this.isRunActive(runToken)) return;
       await lg.log("game_reset", { newGameTime: gameTime });
+      if (!this.isRunActive(runToken)) return;
       console.log("[Engine] Game reset detected");
     }
+    if (!this.isRunActive(runToken)) return;
+    this.updateTacticalContext(snapshot);
     st.lastGameTime = gameTime;
 
     // Opening messages
@@ -316,9 +352,11 @@ export class Engine extends EventEmitter {
       try {
         const greeting = c.pickModePhrase("inicioPartida");
         const tts = await c.speak(greeting);
+        if (!this.isRunActive(runToken)) return;
         this.updateLastMessage(greeting, "heuristic", 0, tts.generateMs ?? 0);
         this.log({ type: "coach_speak", gameTime, message: greeting });
       } catch (err) {
+        if (!this.isRunActive(runToken)) return;
         console.error("[Engine] Opening greeting error:", (err as Error).message);
       }
     }
@@ -327,24 +365,31 @@ export class Engine extends EventEmitter {
       st.matchupDone = true;
       try {
         const matchup = await c.getMatchupTip(snapshot);
+        if (!this.isRunActive(runToken)) return;
         if (matchup) {
           const tts = await c.speak(matchup.message);
+          if (!this.isRunActive(runToken)) return;
           this.updateLastMessage(matchup.message, "llm", matchup.llmMs, tts.generateMs ?? 0);
           this.log({ type: "coach_speak", gameTime, message: matchup.message });
           await lg.log("matchup_tip", { gameTime, message: matchup.message, llmMs: matchup.llmMs, llmTokens: matchup.llmTokens });
+          if (!this.isRunActive(runToken)) return;
           st.lastCoachingAt = gameTime;
           console.log(`[Engine] Matchup tip: "${matchup.message}" (${matchup.llmMs}ms)`);
         } else {
           await lg.log("matchup_skip", { gameTime, reason: "getMatchupTip returned null" });
+          if (!this.isRunActive(runToken)) return;
         }
       } catch (err) {
+        if (!this.isRunActive(runToken)) return;
         console.error("[Engine] Matchup error:", (err as Error).message);
         await lg.log("matchup_error", { gameTime, error: (err as Error).message });
+        if (!this.isRunActive(runToken)) return;
       }
     }
 
     // Analyze
     const { triggers: newTriggers, strategicContext } = await c.analyzeSnapshot(snapshot, st);
+    if (!this.isRunActive(runToken)) return;
     const pending = st.drainPendingTriggers();
     const triggers = sortTriggersByUrgency([...new Set([...pending, ...newTriggers])]);
     const dueForCoaching = gameTime - (st.lastCoachingAt || 0) >= c.settings.coachingIntervalSeconds;
@@ -359,10 +404,12 @@ export class Engine extends EventEmitter {
         triggers,
         strategicContext,
       });
+      if (!this.isRunActive(runToken)) return;
     }
 
     if (!dueForCoaching && triggers.length === 0) {
       await lg.log("loop_skip", { gameTime, reason: "sem gatilho e fora do intervalo" });
+      if (!this.isRunActive(runToken)) return;
       return;
     }
 
@@ -376,9 +423,15 @@ export class Engine extends EventEmitter {
       if (!llmEnabled) {
         c.settings.zaiApiKey = "";
       }
-      decision = await c.decideCoaching(snapshot, triggers, strategicContext);
+      const tacticalMemory = this.tacticalMemory.formatCoachContext(gameTime);
+      const coachStrategicContext = tacticalMemory
+        ? { ...strategicContext, tacticalMemory }
+        : strategicContext;
+      decision = await c.decideCoaching(snapshot, triggers, coachStrategicContext);
+      if (!this.isRunActive(runToken)) return;
       this.engineState.llmStatus = llmEnabled ? "idle" : "disabled";
     } catch (err) {
+      if (!this.isRunActive(runToken)) return;
       this.engineState.llmStatus = llmEnabled ? "error" : "disabled";
       this.log({ type: "coach_error", gameTime, message: (err as Error).message });
       console.error("[Engine] Coach error:", (err as Error).message);
@@ -396,6 +449,7 @@ export class Engine extends EventEmitter {
       llmMs: decision.llmMs, llmError: decision.llmError,
       llmTokens: decision.llmTokens,
     });
+    if (!this.isRunActive(runToken)) return;
     this.log({ type: "coach_decision", gameTime, priority: decision.priority ?? "", shouldSpeak: decision.shouldSpeak });
 
     if (!decision.skippedLlm) {
@@ -408,6 +462,7 @@ export class Engine extends EventEmitter {
           llmError: decision.llmError,
           llmTokens: decision.llmTokens,
         });
+        if (!this.isRunActive(runToken)) return;
       }
 
       if (decision.llmError) {
@@ -476,25 +531,32 @@ export class Engine extends EventEmitter {
       this.engineState.ttsStatus = "speaking";
       try {
         const tts = await c.speak(decision.message);
+        if (!this.isRunActive(runToken)) return;
         const source = decision.skippedLlm ? "heuristic" : decision.fallbackUsed ? "fallback" : "llm";
         this.updateLastMessage(decision.message, source, decision.llmMs ?? 0, tts.generateMs ?? 0);
         this.engineState.ttsStatus = "idle";
         this.send({ type: "tts_done", provider: tts.provider ?? "unknown", generateMs: tts.generateMs ?? 0 });
         await lg.log("coach_speak", { gameTime, message: decision.message, source });
+        if (!this.isRunActive(runToken)) return;
         await lg.log("tts_success", { gameTime, provider: tts.provider, message: decision.message, ttsGenerateMs: tts.generateMs ?? 0, llmMs: decision.llmMs });
+        if (!this.isRunActive(runToken)) return;
         this.log({ type: "coach_speak", gameTime, message: decision.message, source });
         console.log(`[Engine] [${Math.floor(gameTime / 60)}:${String(Math.floor(gameTime % 60)).padStart(2, "0")}] ${decision.message} [${source}]`);
       } catch (err) {
+        if (!this.isRunActive(runToken)) return;
         this.engineState.ttsStatus = "error";
         await lg.log("tts_error", { gameTime, error: (err as Error).message });
+        if (!this.isRunActive(runToken)) return;
         this.send({ type: "tts_error", error: (err as Error).message });
         console.error("[Engine] TTS error:", (err as Error).message);
       }
     } else {
       await lg.log("coach_silence", { gameTime, reason: decision.reason });
+      if (!this.isRunActive(runToken)) return;
       this.log({ type: "coach_silence", gameTime, reason: decision.reason });
     }
 
+    if (!this.isRunActive(runToken)) return;
     st.lastCoachingAt = gameTime;
   }
 
@@ -509,9 +571,16 @@ export class Engine extends EventEmitter {
   stop() {
     if (this.intervalId) { clearInterval(this.intervalId); this.intervalId = null; }
     this.running = false;
+    this.runToken += 1;
     (this as { _ticking?: boolean })._ticking = false;
     this.setStatus("idle");
+    this.tacticalMemory.reset();
+    this.latestTacticalContext = undefined;
     this.engineState.gameDetected = false;
+    this.engineState.gameTime = 0;
+    this.engineState.activeChampion = "";
+    this.engineState.llmStatus = configService.getAll().llm.activeProvider === "none" ? "disabled" : "idle";
+    this.engineState.ttsStatus = "idle";
     console.log("[Engine] Stopped");
   }
 }

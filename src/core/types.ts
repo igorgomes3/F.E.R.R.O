@@ -128,6 +128,7 @@ export interface StrategicContext {
   enemyPower: number;
   scalingRead: string;
   objectiveStates: ObjectiveState[];
+  tacticalMemory?: string;
 }
 
 export interface AnalyzeSnapshotResult {

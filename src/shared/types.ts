@@ -200,6 +200,8 @@ export interface PiperProgress {
 
 export type TacticalConfidence = "confirmed" | "estimated" | "expired" | "unknown";
 export type TacticalFactSource = "manual" | "voice" | "game_api" | "llm";
+export type TacticalFactKind = "cooldown" | "status" | "plan" | "note";
+export type TacticalTeam = "ally" | "enemy" | "unknown";
 export type CooldownSpell =
   | "flash"
   | "heal"
@@ -212,14 +214,40 @@ export type CooldownSpell =
   | "ultimate"
   | "item";
 
+export interface TacticalFact {
+  id: string;
+  kind: TacticalFactKind;
+  champion?: string;
+  team: TacticalTeam;
+  source: TacticalFactSource;
+  text: string;
+  gameTimeSeconds: number;
+  createdAt: string;
+  confidence: TacticalConfidence;
+}
+
 export interface ChampionCooldown {
+  id: string;
   champion: string;
   spell: CooldownSpell;
   source: TacticalFactSource;
   confidence: TacticalConfidence;
+  baseCooldownSeconds: number;
+  adjustedCooldownSeconds: number;
   usedAtSeconds: number;
   readyAtSeconds: number;
   isEnemy: boolean;
+  notes?: string;
+}
+
+export interface TacticalMemoryPlayerContext {
+  championName: string;
+  level: number;
+  items: Array<{ id: number; name: string }>;
+}
+
+export interface TacticalMemoryContext {
+  enemyPlayers: TacticalMemoryPlayerContext[];
 }
 
 export interface TacticalCommandResult {
@@ -227,4 +255,5 @@ export interface TacticalCommandResult {
   kind: "registered" | "query" | "unknown";
   message: string;
   cooldowns?: ChampionCooldown[];
+  facts?: TacticalFact[];
 }

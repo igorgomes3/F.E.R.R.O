@@ -237,4 +237,79 @@ describe("engine opening matchup timing", () => {
 
     expect(matchupCallCount).toBe(1);
   });
+
+  it("does not publish opening greeting when stop happens during greeting TTS", async () => {
+    const voice = await import("../src/core/voice.js");
+    const { engine } = await import("../src/main/services/engine.js");
+    await engine.start();
+
+    if ((engine as unknown as { intervalId: ReturnType<typeof setInterval> | null }).intervalId) {
+      clearInterval((engine as unknown as { intervalId: ReturnType<typeof setInterval> | null }).intervalId as ReturnType<typeof setInterval>);
+      (engine as unknown as { intervalId: ReturnType<typeof setInterval> | null }).intervalId = null;
+    }
+
+    let resolveSpeak!: () => void;
+    vi.mocked(voice.speak).mockClear();
+    vi.mocked(voice.speak).mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveSpeak = () => resolve({ generateMs: 12, provider: "mock" });
+      }) as ReturnType<typeof voice.speak>,
+    );
+    currentSnapshot = makeSnapshot(10);
+    const tickPromise = (engine as unknown as { tick: () => Promise<void> }).tick();
+    for (let i = 0; i < 10 && vi.mocked(voice.speak).mock.calls.length === 0; i++) {
+      await Promise.resolve();
+    }
+    expect(vi.mocked(voice.speak).mock.calls.length).toBeGreaterThan(0);
+
+    engine.stop();
+    resolveSpeak();
+    await tickPromise;
+
+    expect(engine.engineState.lastMessage).toBe("");
+    expect(logger.log).not.toHaveBeenCalledWith("coach_speak", expect.anything());
+  });
+
+  it("does not start matchup TTS when stop happens during matchup lookup", async () => {
+    const coach = await import("../src/core/coach.js");
+    const voice = await import("../src/core/voice.js");
+    const configService = await import("../src/main/services/config-service.js");
+    configService.initConfigStore();
+    configService.setPath("llm.activeProvider", "zai");
+    configService.setPath("llm.providers.zai.apiKey", "test-key");
+    configService.setPath("llm.providers.zai.model", "glm-5");
+    const { engine } = await import("../src/main/services/engine.js");
+    await engine.start();
+
+    if ((engine as unknown as { intervalId: ReturnType<typeof setInterval> | null }).intervalId) {
+      clearInterval((engine as unknown as { intervalId: ReturnType<typeof setInterval> | null }).intervalId as ReturnType<typeof setInterval>);
+      (engine as unknown as { intervalId: ReturnType<typeof setInterval> | null }).intervalId = null;
+    }
+
+    currentSnapshot = makeSnapshot(10);
+    await (engine as unknown as { tick: () => Promise<void> }).tick();
+    speakCalls.length = 0;
+
+    let resolveMatchup!: () => void;
+    vi.mocked(coach.getMatchupTip).mockClear();
+    vi.mocked(coach.getMatchupTip).mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveMatchup = () => resolve({ message: "Respeita o poke e pune a skill chave.", llmMs: 123 });
+      }) as ReturnType<typeof coach.getMatchupTip>,
+    );
+    vi.mocked(voice.speak).mockClear();
+    currentSnapshot = makeSnapshot(55);
+    const tickPromise = (engine as unknown as { tick: () => Promise<void> }).tick();
+    for (let i = 0; i < 10 && vi.mocked(coach.getMatchupTip).mock.calls.length === 0; i++) {
+      await Promise.resolve();
+    }
+    expect(vi.mocked(coach.getMatchupTip).mock.calls.length).toBeGreaterThan(0);
+
+    engine.stop();
+    resolveMatchup();
+    await tickPromise;
+
+    expect(vi.mocked(voice.speak)).not.toHaveBeenCalledWith("Respeita o poke e pune a skill chave.");
+    expect(speakCalls).toEqual([]);
+  });
 });

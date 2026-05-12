@@ -443,6 +443,10 @@ function buildPrompt(
     lines.push(`Objetivos: ${objs.join(" | ")}`);
   }
 
+  if (strategicContext?.tacticalMemory) {
+    lines.push(`Memoria tatica: ${strategicContext.tacticalMemory}`);
+  }
+
   return lines.join("\n");
 }
 
@@ -475,6 +479,7 @@ export async function decideCoaching(
   const hasStrategicContext =
     priority !== null ||
     triggers.length > 0 ||
+    Boolean(strategicContext?.tacticalMemory) ||
     strategicContext?.objectiveStates?.some((o) => o.available);
 
   if (!hasStrategicContext) {
