@@ -5,6 +5,7 @@ import type { ChampionCooldown, EngineState, EngineStatus, EngineEvent, LogEntry
 import { populateEnvFromConfig } from "../lib/settings-bridge";
 import * as configService from "./config-service";
 import { CATEGORY_PRIORITIES, COOLDOWN_GROUPS } from "../../core/constants";
+import { createTacticalPlan } from "../../core/tactical-plan";
 import { TacticalMemory } from "../../core/tactical-memory";
 import type {
   AnalyzeSnapshotResult,
@@ -16,6 +17,7 @@ import type {
   MatchupTip,
   SpeakResult,
   StrategicContext,
+  TacticalPlanInput,
 } from "../../core/types";
 import { sortTriggersByUrgency } from "../../core/analyzer";
 
@@ -53,6 +55,7 @@ export class Engine extends EventEmitter {
     gameDetected: false,
     gameTime: 0,
     activeChampion: "",
+    currentTacticalPlan: null,
     lastMessage: "",
     lastMessageSource: "",
     lastLLMMs: 0,
@@ -182,6 +185,29 @@ export class Engine extends EventEmitter {
     return this.engineState.gameDetected ? this.engineState.gameTime : 0;
   }
 
+  private buildTacticalPlanInput(snapshot: GameSnapshot, strategicContext: StrategicContext): TacticalPlanInput {
+    const gameTimeSeconds = Math.floor(snapshot.gameTime);
+    return {
+      gameTimeSeconds,
+      objectiveStates: strategicContext.objectiveStates,
+      enemyThreat: strategicContext.enemyThreat,
+      enemyThreats: strategicContext.enemyThreats,
+      alliedPower: strategicContext.alliedPower,
+      enemyPower: strategicContext.enemyPower,
+      alliedDeaths: snapshot.alliedPlayers
+        .filter((player) => player.championName && snapshot.activePlayerIsDead && player.championName === snapshot.activePlayerChampion)
+        .map((player) => ({ championName: player.championName, isEnemy: false, respawnAtSeconds: gameTimeSeconds + Math.max(0, snapshot.activePlayerRespawnTimer) })),
+      enemyDeaths: [],
+      cooldowns: this.tacticalMemory.listCooldowns(gameTimeSeconds).map((cooldown) => ({
+        champion: cooldown.champion,
+        spell: cooldown.spell,
+        isEnemy: cooldown.isEnemy,
+        confidence: cooldown.confidence,
+        readyAtSeconds: cooldown.readyAtSeconds,
+      })),
+    };
+  }
+
   private isRunActive(runToken: number): boolean {
     return this.running && this.runToken === runToken;
   }
@@ -295,6 +321,7 @@ export class Engine extends EventEmitter {
           this.engineState.gameDetected = false;
           this.engineState.gameTime = 0;
           this.engineState.activeChampion = "";
+          this.engineState.currentTacticalPlan = null;
           this.send({ type: "game_ended" });
         }
         await lg.log("waiting_for_game");
@@ -335,6 +362,7 @@ export class Engine extends EventEmitter {
       st.reset();
       this.tacticalMemory.reset();
       this.latestTacticalContext = undefined;
+      this.engineState.currentTacticalPlan = null;
       await lg.newSession();
       if (!this.isRunActive(runToken)) return;
       await lg.log("game_reset", { newGameTime: gameTime });
@@ -390,6 +418,8 @@ export class Engine extends EventEmitter {
     // Analyze
     const { triggers: newTriggers, strategicContext } = await c.analyzeSnapshot(snapshot, st);
     if (!this.isRunActive(runToken)) return;
+    const currentTacticalPlan = createTacticalPlan(this.buildTacticalPlanInput(snapshot, strategicContext));
+    this.engineState.currentTacticalPlan = currentTacticalPlan;
     const pending = st.drainPendingTriggers();
     const triggers = sortTriggersByUrgency([...new Set([...pending, ...newTriggers])]);
     const dueForCoaching = gameTime - (st.lastCoachingAt || 0) >= c.settings.coachingIntervalSeconds;
@@ -579,6 +609,7 @@ export class Engine extends EventEmitter {
     this.engineState.gameDetected = false;
     this.engineState.gameTime = 0;
     this.engineState.activeChampion = "";
+    this.engineState.currentTacticalPlan = null;
     this.engineState.llmStatus = configService.getAll().llm.activeProvider === "none" ? "disabled" : "idle";
     this.engineState.ttsStatus = "idle";
     console.log("[Engine] Stopped");

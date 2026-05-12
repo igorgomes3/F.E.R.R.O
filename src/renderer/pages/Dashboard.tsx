@@ -9,6 +9,7 @@ const DEFAULT_STATE: EngineState = {
   gameDetected: false,
   gameTime: 0,
   activeChampion: "",
+  currentTacticalPlan: null,
   lastMessage: "",
   lastMessageSource: "",
   lastLLMMs: 0,

@@ -7,11 +7,33 @@ export type EngineStatus =
   | "paused"
   | "error";
 
+export type TacticalPlanIntent = "fight" | "avoid_fight" | "prepare_objective" | "trade_objective" | "reset" | "pressure_lane" | "farm_safe";
+export type TacticalPlanPriority = "low" | "medium" | "high";
+export type TacticalPlanConfidence = "confirmed" | "estimated" | "unknown";
+
+export interface TacticalPlanReason {
+  kind: "objective" | "cooldown" | "death" | "threat" | "powerspike" | "lane" | "fallback";
+  text: string;
+  confidence: TacticalPlanConfidence;
+  weight: number;
+}
+
+export interface TacticalPlan {
+  intent: TacticalPlanIntent;
+  priority: TacticalPlanPriority;
+  summary: string;
+  reasons: TacticalPlanReason[];
+  confidence: TacticalPlanConfidence;
+  createdAtGameTimeSeconds: number;
+  expiresAtGameTimeSeconds?: number;
+}
+
 export interface EngineState {
   status: EngineStatus;
   gameDetected: boolean;
   gameTime: number;
   activeChampion: string;
+  currentTacticalPlan: TacticalPlan | null;
   lastMessage: string;
   lastMessageSource: "llm" | "heuristic" | "fallback" | "";
   lastLLMMs: number;
