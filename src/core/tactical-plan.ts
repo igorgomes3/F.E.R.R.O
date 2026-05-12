@@ -79,7 +79,11 @@ function collectAvoidFightReasons(input: TacticalPlanInput, gameTime: number): T
 
 function collectEnemyCooldownReasons(input: TacticalPlanInput, gameTime: number): TacticalPlanReason[] {
   return input.cooldowns
-    .filter((cooldown) => cooldown.isEnemy && cooldown.readyAtSeconds > gameTime && cooldown.confidence !== "expired")
+    .filter((cooldown) => cooldown.isEnemy && cooldown.readyAtSeconds > gameTime && (cooldown.confidence === "confirmed" || cooldown.confidence === "estimated"))
+    .sort((left, right) => {
+      const confidenceDiff = confidenceRank(right.confidence) - confidenceRank(left.confidence);
+      return confidenceDiff || left.readyAtSeconds - right.readyAtSeconds;
+    })
     .slice(0, 2)
     .map((cooldown) => ({
       kind: "cooldown" as const,
@@ -87,6 +91,10 @@ function collectEnemyCooldownReasons(input: TacticalPlanInput, gameTime: number)
       confidence: cooldown.confidence === "confirmed" ? "confirmed" : "estimated",
       weight: cooldown.confidence === "confirmed" ? 3 : 2,
     }));
+}
+
+function confidenceRank(confidence: TacticalPlanInput["cooldowns"][number]["confidence"]): number {
+  return confidence === "confirmed" ? 2 : confidence === "estimated" ? 1 : 0;
 }
 
 function findSoonObjective(objectives: ObjectiveState[]): ObjectiveState | null {

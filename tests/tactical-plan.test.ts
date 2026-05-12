@@ -85,4 +85,30 @@ describe("tactical plan", () => {
     ]));
     expect(plan.confidence).toBe("estimated");
   });
+
+  it("ignores unknown-confidence cooldowns when strengthening objective plans", () => {
+    const plan = createTacticalPlan(baseInput({
+      gameTimeSeconds: 700,
+      objectiveStates: [{ name: "dragão", spawnIn: "30 segundos", available: false }],
+      cooldowns: [{ champion: "Ashe", spell: "flash", isEnemy: true, confidence: "unknown", readyAtSeconds: 850 }],
+    }));
+
+    expect(plan.priority).toBe("medium");
+    expect(plan.reasons.some((reason) => reason.kind === "cooldown")).toBe(false);
+  });
+
+  it("prefers confirmed cooldown reasons over estimated cooldowns", () => {
+    const plan = createTacticalPlan(baseInput({
+      gameTimeSeconds: 700,
+      objectiveStates: [{ name: "dragão", spawnIn: "30 segundos", available: false }],
+      cooldowns: [
+        { champion: "Lux", spell: "heal", isEnemy: true, confidence: "estimated", readyAtSeconds: 760 },
+        { champion: "Morgana", spell: "ignite", isEnemy: true, confidence: "estimated", readyAtSeconds: 780 },
+        { champion: "Ashe", spell: "flash", isEnemy: true, confidence: "confirmed", readyAtSeconds: 850 },
+      ],
+    }));
+
+    const cooldownTexts = plan.reasons.filter((reason) => reason.kind === "cooldown").map((reason) => reason.text);
+    expect(cooldownTexts.some((text) => text.includes("Ashe"))).toBe(true);
+  });
 });
