@@ -7,6 +7,8 @@ import { listPiperVoices, listElevenLabsVoices, listSystemVoices } from "../serv
 import { getLatestElevenLabsUsageSummary } from "../services/elevenlabs-usage-service";
 import { getStartupState } from "../services/startup-state";
 import { populateEnvFromConfig } from "../lib/settings-bridge";
+import { createTextResponse } from "../../core/llm-client";
+import type { LLMProviderType } from "../../shared/types";
 import path from "path";
 
 const TAG = "[IPC]";
@@ -21,6 +23,16 @@ function safeAsciiPreview(text: string, maxLen = 30): string {
   return normalized.length > maxLen ? normalized.slice(0, maxLen) + "..." : normalized;
 }
 
+function safeEndpointMetadata(endpoint: string): string {
+  try {
+    const url = new URL(endpoint);
+    const query = url.search ? "?query" : "";
+    return `${url.protocol}//${url.hostname}${url.pathname}${query}`;
+  } catch {
+    return "invalid-url";
+  }
+}
+
 function keyFingerprint(apiKey: string): string {
   const clean = apiKey.trim();
   if (!clean) return "none";
@@ -33,6 +45,15 @@ function normalizeTtsProvider(provider: string): "piper" | "elevenlabs" | "say" 
   if (normalized === "piper") return "piper";
   if (normalized === "elevenlabs") return "elevenlabs";
   return "say";
+}
+
+type LlmTestProviderKey = Exclude<LLMProviderType, "none">;
+const LLM_TEST_PROVIDER_KEYS: readonly LlmTestProviderKey[] = ["zai", "openai", "gemini", "custom"];
+
+function normalizeLlmTestProvider(provider: unknown): LlmTestProviderKey | null {
+  if (typeof provider !== "string") return null;
+  const normalized = provider.trim().toLowerCase();
+  return LLM_TEST_PROVIDER_KEYS.includes(normalized as LlmTestProviderKey) ? (normalized as LlmTestProviderKey) : null;
 }
 
 function emitConfigChanged(mainWindow: BrowserWindow, configPath: string, value: unknown): void {
@@ -71,6 +92,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   ipcMain.handle(IPC.ENGINE_STATUS, () => engine.engineState);
+
+  ipcMain.handle(IPC.TACTICAL_MEMORY_COMMAND, (_e, text: unknown) => engine.handleTacticalCommand(text));
+
+  ipcMain.handle(IPC.TACTICAL_MEMORY_LIST, () => engine.listTacticalCooldowns());
+
+  ipcMain.handle(IPC.TACTICAL_MEMORY_RESET, () => engine.resetTacticalMemory());
 
   // ── Logs ────────────────────────────────────────────
   ipcMain.handle(IPC.LOGS_GET, () => []);
@@ -210,31 +237,36 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   // ── LLM Test ────────────────────────────────────────
-  ipcMain.handle(IPC.LLM_TEST, async (_e, provider: string) => {
+  ipcMain.handle(IPC.LLM_TEST, async (_e, provider: unknown) => {
     log("llm:test provider:", provider);
     try {
       const config = configService.getAll();
-      const providerKey = provider as "zai" | "openai" | "gemini";
+      const providerKey = normalizeLlmTestProvider(provider);
+      if (!providerKey) {
+        log("llm:test invalid provider:", provider);
+        return { ok: false, error: "API key não configurada" };
+      }
+
       const pConfig = config.llm.providers[providerKey];
       if (!pConfig?.apiKey) {
         log("llm:test no API key for", provider);
         return { ok: false, error: "API key não configurada" };
       }
 
-      const OpenAI = (await import("openai")).default;
-      const baseURL = pConfig.endpoint.replace(/\/chat\/completions\/?$/, "");
-      log("llm:test calling", baseURL, "model:", pConfig.model);
-      const client = new OpenAI({ apiKey: pConfig.apiKey, baseURL });
+      log("llm:test calling", safeEndpointMetadata(pConfig.endpoint), "model:", pConfig.model, "protocol:", pConfig.protocol ?? "chat_completions");
 
       const start = Date.now();
-      const resp = await client.chat.completions.create({
+      const result = await createTextResponse({
+        apiKey: pConfig.apiKey,
+        endpoint: pConfig.endpoint,
         model: pConfig.model,
+        protocol: pConfig.protocol ?? "chat_completions",
         messages: [{ role: "user", content: "Responda apenas: OK" }],
-        max_tokens: 10,
+        maxTokens: 10,
       });
       const ms = Date.now() - start;
-      const message = resp.choices?.[0]?.message?.content ?? "";
-      log("llm:test success in", ms, "ms, response:", message);
+      const message = result.message;
+      log("llm:test success in", ms, "ms, responseChars:", message.length, "preview:", safeAsciiPreview(message));
       return { ok: true, response: message, ms };
     } catch (error) {
       console.error(TAG, "llm:test error:", (error as Error).message);
@@ -259,6 +291,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       configMod.settings.zaiApiKey = llm.apiKey;
       configMod.settings.zaiEndpoint = llm.endpoint;
       configMod.settings.zaiModel = llm.model;
+      configMod.settings.llmProtocol = llm.protocol ?? "chat_completions";
       configMod.settings.coachMessageMode = cfg.coach.messageMode;
 
       const tip = await coachMod.getMatchupTip({

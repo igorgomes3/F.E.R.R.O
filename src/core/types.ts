@@ -2,6 +2,7 @@ export interface CoreSettings {
   zaiApiKey: string;
   zaiEndpoint: string;
   zaiModel: string;
+  llmProtocol: "chat_completions" | "responses";
   liveClientBaseUrl: string;
   ddragonVersionsUrl: string;
   ddragonCdnUrl: string;

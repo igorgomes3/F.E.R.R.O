@@ -21,6 +21,9 @@ const api = {
   stopEngine: () => ipcRenderer.invoke(IPC.ENGINE_STOP),
   getEngineStatus: () => ipcRenderer.invoke(IPC.ENGINE_STATUS),
   onEngineEvent: (cb: (data: unknown) => void) => sub(IPC.ENGINE_EVENT, cb),
+  sendTacticalCommand: (text: string) => ipcRenderer.invoke(IPC.TACTICAL_MEMORY_COMMAND, text),
+  listTacticalCooldowns: () => ipcRenderer.invoke(IPC.TACTICAL_MEMORY_LIST),
+  resetTacticalMemory: () => ipcRenderer.invoke(IPC.TACTICAL_MEMORY_RESET),
 
   // Logs
   getLogs: (count: number) => ipcRenderer.invoke(IPC.LOGS_GET, count),

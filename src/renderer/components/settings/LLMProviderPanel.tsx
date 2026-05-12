@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FerroConfig, LLMProviderType } from "../../../shared/types";
 import APIKeyInput from "./APIKeyInput";
+import CustomLLMSettings from "./CustomLLMSettings";
 import ModelSelector from "./ModelSelector";
 
 const PROVIDERS: { id: LLMProviderType; name: string; desc: string; badge: string }[] = [
@@ -8,6 +9,7 @@ const PROVIDERS: { id: LLMProviderType; name: string; desc: string; badge: strin
   { id: "zai", name: "Z.AI", desc: "GLM-5 via Z.ai", badge: "Pago" },
   { id: "openai", name: "OpenAI", desc: "GPT / o-series", badge: "Pago" },
   { id: "gemini", name: "Gemini", desc: "Google AI", badge: "Pago" },
+  { id: "custom", name: "Custom", desc: "OpenAI-compatible", badge: "Avancado" },
 ];
 
 interface Props {
@@ -61,7 +63,7 @@ export default function LLMProviderPanel({ config, onUpdate }: Props) {
         </p>
       </div>
 
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
         {PROVIDERS.map((p) => (
           <button
             key={p.id}
@@ -97,16 +99,22 @@ export default function LLMProviderPanel({ config, onUpdate }: Props) {
 
       {active !== "none" && (
         <div className="card-glass space-y-4 p-5">
-          <APIKeyInput
-            label="API Key"
-            value={config.llm.providers[active].apiKey}
-            onChange={(v) => onUpdate(`llm.providers.${active}.apiKey`, v)}
-          />
-          <ModelSelector
-            provider={active}
-            value={config.llm.providers[active].model}
-            onChange={(v) => onUpdate(`llm.providers.${active}.model`, v)}
-          />
+          {active === "custom" ? (
+            <CustomLLMSettings provider={config.llm.providers.custom} onUpdate={onUpdate} />
+          ) : (
+            <>
+              <APIKeyInput
+                label="API Key"
+                value={config.llm.providers[active].apiKey}
+                onChange={(v) => onUpdate(`llm.providers.${active}.apiKey`, v)}
+              />
+              <ModelSelector
+                provider={active}
+                value={config.llm.providers[active].model}
+                onChange={(v) => onUpdate(`llm.providers.${active}.model`, v)}
+              />
+            </>
+          )}
           <div className="flex items-center gap-3">
             <button
               className="btn-ghost text-sm"

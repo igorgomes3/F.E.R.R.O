@@ -43,7 +43,8 @@ export interface EngineEvent {
 
 // ── Config ─────────────────────────────────────────────
 
-export type LLMProviderType = "none" | "zai" | "openai" | "gemini";
+export type LLMProviderType = "none" | "zai" | "openai" | "gemini" | "custom";
+export type LLMProtocol = "chat_completions" | "responses";
 export type TTSProviderType = "piper" | "elevenlabs" | "system";
 export type MessageMode = "serio" | "meme" | "puto";
 
@@ -51,6 +52,8 @@ export interface LLMProviderConfig {
   apiKey: string;
   endpoint: string;
   model: string;
+  protocol?: LLMProtocol;
+  models?: string[];
 }
 
 export interface MessageCategoryConfig {
@@ -65,6 +68,7 @@ export interface FerroConfig {
       zai: LLMProviderConfig;
       openai: LLMProviderConfig;
       gemini: LLMProviderConfig;
+      custom: LLMProviderConfig;
     };
   };
   tts: {
@@ -190,4 +194,37 @@ export interface PiperProgress {
   stage: "downloading_binary" | "extracting" | "downloading_voice" | "verifying" | "done" | "error";
   percent: number;
   message: string;
+}
+
+// ── Tactical Memory ─────────────────────────────────────
+
+export type TacticalConfidence = "confirmed" | "estimated" | "expired" | "unknown";
+export type TacticalFactSource = "manual" | "voice" | "game_api" | "llm";
+export type CooldownSpell =
+  | "flash"
+  | "heal"
+  | "ignite"
+  | "exhaust"
+  | "cleanse"
+  | "ghost"
+  | "teleport"
+  | "smite"
+  | "ultimate"
+  | "item";
+
+export interface ChampionCooldown {
+  champion: string;
+  spell: CooldownSpell;
+  source: TacticalFactSource;
+  confidence: TacticalConfidence;
+  usedAtSeconds: number;
+  readyAtSeconds: number;
+  isEnemy: boolean;
+}
+
+export interface TacticalCommandResult {
+  ok: boolean;
+  kind: "registered" | "query" | "unknown";
+  message: string;
+  cooldowns?: ChampionCooldown[];
 }

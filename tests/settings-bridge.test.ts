@@ -36,6 +36,7 @@ describe("settings-bridge", () => {
     delete process.env.TTS_PROVIDER;
     delete process.env.TTS_ENABLED;
     delete process.env.COACH_MESSAGE_MODE;
+    delete process.env.LLM_PROTOCOL;
   });
 
   it("sets empty LLM vars when activeProvider is 'none'", async () => {
@@ -48,6 +49,30 @@ describe("settings-bridge", () => {
     expect(process.env.ZAI_API_KEY).toBe("");
     expect(process.env.ZAI_ENDPOINT).toBe("");
     expect(process.env.ZAI_MODEL).toBe("");
+    expect(process.env.LLM_PROTOCOL).toBe("chat_completions");
+  });
+
+  it("sets LLM_PROTOCOL from active provider protocol", async () => {
+    const { initConfigStore, setPath } = await import("../src/main/services/config-service.js");
+    initConfigStore();
+    setPath("llm.activeProvider", "openai");
+    setPath("llm.providers.openai.protocol", "responses");
+    const { populateEnvFromConfig } = await import("../src/main/lib/settings-bridge.js");
+
+    populateEnvFromConfig();
+
+    expect(process.env.LLM_PROTOCOL).toBe("responses");
+  });
+
+  it("defaults LLM_PROTOCOL to chat_completions when active provider has no protocol", async () => {
+    const { initConfigStore, setPath } = await import("../src/main/services/config-service.js");
+    initConfigStore();
+    setPath("llm.activeProvider", "openai");
+    const { populateEnvFromConfig } = await import("../src/main/lib/settings-bridge.js");
+
+    populateEnvFromConfig();
+
+    expect(process.env.LLM_PROTOCOL).toBe("chat_completions");
   });
 
   it("sets TTS_ENABLED to true always", async () => {

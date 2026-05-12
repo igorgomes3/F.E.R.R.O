@@ -73,6 +73,69 @@ describe("config-service", () => {
     expect(getAll().llm.activeProvider).toBe("none");
   });
 
+  it("includes default custom LLM provider config", async () => {
+    const { initConfigStore, getAll } = await import("../src/main/services/config-service.js");
+    initConfigStore();
+
+    expect(getAll().llm.providers.custom).toEqual({
+      apiKey: "",
+      endpoint: "https://api.openai.com/v1",
+      model: "gpt-4o-mini",
+      protocol: "responses",
+      models: ["gpt-4o-mini"],
+    });
+  });
+
+  it("normalizes legacy LLM config that is missing the custom provider", async () => {
+    const { initConfigStore, getAll, get, set } = await import("../src/main/services/config-service.js");
+    initConfigStore();
+
+    set("llm", {
+      activeProvider: "custom",
+      providers: {
+        zai: { apiKey: "zai-key", endpoint: "https://zai.example", model: "glm-custom" },
+        openai: { apiKey: "openai-key", endpoint: "https://openai.example", model: "gpt-custom" },
+        gemini: { apiKey: "gemini-key", endpoint: "https://gemini.example", model: "gemini-custom" },
+      },
+    } as never);
+
+    const llm = getAll().llm;
+    expect(llm.activeProvider).toBe("custom");
+    expect(llm.providers.zai).toEqual({ apiKey: "zai-key", endpoint: "https://zai.example", model: "glm-custom" });
+    expect(llm.providers.custom).toEqual({
+      apiKey: "",
+      endpoint: "https://api.openai.com/v1",
+      model: "gpt-4o-mini",
+      protocol: "responses",
+      models: ["gpt-4o-mini"],
+    });
+    expect(get("llm").providers.custom.models).toEqual(["gpt-4o-mini"]);
+  });
+
+  it("normalizes legacy custom provider without wiping user values", async () => {
+    const { initConfigStore, getAll, set } = await import("../src/main/services/config-service.js");
+    initConfigStore();
+
+    set("llm", {
+      activeProvider: "custom",
+      providers: {
+        custom: {
+          apiKey: "custom-key",
+          endpoint: "https://custom.example/v1/chat/completions",
+          model: "custom-model",
+        },
+      },
+    } as never);
+
+    expect(getAll().llm.providers.custom).toEqual({
+      apiKey: "custom-key",
+      endpoint: "https://custom.example/v1/chat/completions",
+      model: "custom-model",
+      protocol: "responses",
+      models: ["gpt-4o-mini"],
+    });
+  });
+
   it("default TTS provider is 'piper'", async () => {
     const { initConfigStore, getAll } = await import("../src/main/services/config-service.js");
     initConfigStore();

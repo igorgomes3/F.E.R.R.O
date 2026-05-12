@@ -24,6 +24,13 @@ const DEFAULT_CONFIG: FerroConfig = {
         endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
         model: "gemini-2.0-flash",
       },
+      custom: {
+        apiKey: "",
+        endpoint: "https://api.openai.com/v1",
+        model: "gpt-4o-mini",
+        protocol: "responses",
+        models: ["gpt-4o-mini"],
+      },
     },
   },
   tts: {
@@ -105,11 +112,11 @@ export function getConfigStore(): Store<FerroConfig> {
 }
 
 export function getAll(): FerroConfig {
-  return getConfigStore().store;
+  return normalizeConfig(getConfigStore().store);
 }
 
 export function get<K extends keyof FerroConfig>(key: K): FerroConfig[K] {
-  return getConfigStore().get(key);
+  return getAll()[key];
 }
 
 export function set<K extends keyof FerroConfig>(key: K, value: FerroConfig[K]): void {
@@ -122,4 +129,26 @@ export function setPath(path: string, value: unknown): void {
 
 export function reset(): void {
   getConfigStore().clear();
+}
+
+function normalizeConfig(config: FerroConfig): FerroConfig {
+  return mergeDefaults(DEFAULT_CONFIG, config);
+}
+
+function mergeDefaults<T>(defaults: T, value: unknown): T {
+  if (!isPlainObject(defaults)) return value === undefined ? defaults : (value as T);
+
+  const result: Record<string, unknown> = { ...defaults };
+  if (!isPlainObject(value)) return result as T;
+
+  for (const [key, nextValue] of Object.entries(value)) {
+    const defaultValue = (defaults as Record<string, unknown>)[key];
+    result[key] = isPlainObject(defaultValue) ? mergeDefaults(defaultValue, nextValue) : nextValue;
+  }
+
+  return result as T;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

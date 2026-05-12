@@ -16,11 +16,13 @@ export function populateEnvFromConfig(): void {
     process.env.ZAI_API_KEY = "";
     process.env.ZAI_ENDPOINT = "";
     process.env.ZAI_MODEL = "";
+    process.env.LLM_PROTOCOL = "chat_completions";
   } else {
     const active = config.llm.providers[config.llm.activeProvider];
     process.env.ZAI_API_KEY = active.apiKey;
     process.env.ZAI_ENDPOINT = active.endpoint;
     process.env.ZAI_MODEL = active.model;
+    process.env.LLM_PROTOCOL = active.protocol ?? "chat_completions";
   }
 
   // Game

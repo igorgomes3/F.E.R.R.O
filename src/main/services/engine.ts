@@ -1,10 +1,11 @@
 import { EventEmitter } from "events";
 import type { BrowserWindow } from "electron";
 import { IPC } from "../../shared/channels";
-import type { EngineState, EngineStatus, EngineEvent, LogEntry } from "../../shared/types";
+import type { ChampionCooldown, EngineState, EngineStatus, EngineEvent, LogEntry, TacticalCommandResult } from "../../shared/types";
 import { populateEnvFromConfig } from "../lib/settings-bridge";
 import * as configService from "./config-service";
 import { CATEGORY_PRIORITIES, COOLDOWN_GROUPS } from "../../core/constants";
+import { TacticalMemory } from "../../core/tactical-memory";
 import type {
   AnalyzeSnapshotResult,
   CoachDecision,
@@ -43,6 +44,7 @@ export class Engine extends EventEmitter {
   private mainWindow: BrowserWindow | null = null;
   private state: LoopStateShape | null = null;
   private logger: CoreLogger | null = null;
+  private readonly tacticalMemory = new TacticalMemory();
 
   public engineState: EngineState = {
     status: "idle",
@@ -101,6 +103,7 @@ export class Engine extends EventEmitter {
       zaiApiKey: llm?.apiKey ?? "",
       zaiEndpoint: llm?.endpoint ?? "",
       zaiModel: llm?.model ?? "",
+      llmProtocol: llm?.protocol ?? "chat_completions",
       liveClientBaseUrl: "https://127.0.0.1:2999",
       pollIntervalSeconds: cfg.game.pollIntervalSeconds,
       coachingIntervalSeconds: cfg.game.coachingIntervalSeconds,
@@ -141,6 +144,26 @@ export class Engine extends EventEmitter {
   public syncConfig() {
     this.applyConfigToRuntime();
     this.send({ type: "status_change", status: this.engineState.status });
+  }
+
+  public handleTacticalCommand(text: unknown): TacticalCommandResult {
+    if (typeof text !== "string" || text.trim().length === 0) {
+      return { ok: false, kind: "unknown", message: "Comando tatico invalido." };
+    }
+
+    return this.tacticalMemory.handleText(text, this.currentTacticalGameTime());
+  }
+
+  public listTacticalCooldowns(): ChampionCooldown[] {
+    return this.tacticalMemory.listCooldowns(this.currentTacticalGameTime());
+  }
+
+  public resetTacticalMemory(): void {
+    this.tacticalMemory.reset();
+  }
+
+  private currentTacticalGameTime(): number {
+    return this.engineState.gameDetected ? this.engineState.gameTime : 0;
   }
 
   private requireRuntime(): { core: LoadedCore; state: LoopStateShape; logger: CoreLogger } {
@@ -242,6 +265,7 @@ export class Engine extends EventEmitter {
         if (st.lastGameTime !== null) {
           await lg.log("game_ended", { lastGameTime: st.lastGameTime });
           st.reset();
+          this.tacticalMemory.reset();
           this.engineState.gameDetected = false;
           this.engineState.gameTime = 0;
           this.engineState.activeChampion = "";
@@ -278,6 +302,7 @@ export class Engine extends EventEmitter {
     // Game reset
     if (st.detectGameReset(gameTime)) {
       st.reset();
+      this.tacticalMemory.reset();
       await lg.newSession();
       await lg.log("game_reset", { newGameTime: gameTime });
       console.log("[Engine] Game reset detected");

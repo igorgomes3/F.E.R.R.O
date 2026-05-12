@@ -10,6 +10,9 @@ export const IPC = {
   ENGINE_STOP: "engine:stop",
   ENGINE_STATUS: "engine:status",
   ENGINE_EVENT: "engine:event",
+  TACTICAL_MEMORY_COMMAND: "tactical-memory:command",
+  TACTICAL_MEMORY_LIST: "tactical-memory:list",
+  TACTICAL_MEMORY_RESET: "tactical-memory:reset",
 
   // Logs
   LOGS_GET: "logs:get",

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { EngineState } from "../../shared/types";
 import LogPanel from "../components/dashboard/LogPanel";
+import TacticalMemoryPanel from "../components/dashboard/TacticalMemoryPanel";
 
 const DEFAULT_STATE: EngineState = {
   status: "idle",
@@ -124,6 +125,11 @@ export default function Dashboard() {
           </p>
         </div>
       )}
+
+      {/* Tactical memory */}
+      <div className="animate-in animate-in-delay-4 relative z-10 mt-8 w-full max-w-lg">
+        <TacticalMemoryPanel />
+      </div>
 
       {/* Log panel */}
       <div className="animate-in animate-in-delay-4 relative z-10 mt-12 w-full">

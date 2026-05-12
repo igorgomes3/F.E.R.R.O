@@ -16,11 +16,16 @@ function getBoolean(name: string, fallback: boolean): boolean {
   return value.toLowerCase() === "true";
 }
 
+function getLlmProtocol(): CoreSettings["llmProtocol"] {
+  return process.env.LLM_PROTOCOL === "responses" ? "responses" : "chat_completions";
+}
+
 export const settings: CoreSettings = {
   zaiApiKey: process.env.ZAI_API_KEY ?? "",
   zaiEndpoint:
     process.env.ZAI_ENDPOINT ?? "https://api.z.ai/api/coding/paas/v4/chat/completions",
   zaiModel: process.env.ZAI_MODEL ?? "glm-5",
+  llmProtocol: getLlmProtocol(),
   liveClientBaseUrl: process.env.LIVE_CLIENT_BASE_URL ?? "https://127.0.0.1:2999",
   ddragonVersionsUrl:
     process.env.DDRAGON_VERSIONS_URL ?? "https://ddragon.leagueoflegends.com/api/versions.json",
@@ -60,7 +65,7 @@ export const settings: CoreSettings = {
 };
 
 export function getZaiBaseUrl(): string {
-  return settings.zaiEndpoint.replace(/\/chat\/completions\/?$/, "");
+  return settings.zaiEndpoint.trim().replace(/\/+$/, "").replace(/\/(?:chat\/completions|responses)$/, "");
 }
 
 export function assertConfig(): void {

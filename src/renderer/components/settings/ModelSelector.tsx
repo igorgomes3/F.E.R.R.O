@@ -9,12 +9,16 @@ const LLM_MODELS: Record<string, string[]> = {
 interface Props {
   provider: LLMProviderType;
   value: string;
+  models?: string[];
   onChange: (model: string) => void;
 }
 
-export default function ModelSelector({ provider, value, onChange }: Props) {
+export default function ModelSelector({ provider, value, models: customModels, onChange }: Props) {
   if (provider === "none") return null;
-  const models = LLM_MODELS[provider] ?? [];
+  const normalizedCustomModels = customModels?.map((model) => model.trim()).filter(Boolean) ?? [];
+  const models = provider === "custom"
+    ? (normalizedCustomModels.length > 0 ? normalizedCustomModels : [value].filter(Boolean))
+    : LLM_MODELS[provider] ?? [];
 
   return (
     <div>
