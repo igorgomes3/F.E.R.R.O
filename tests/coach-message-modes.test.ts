@@ -112,11 +112,114 @@ describe("coach message modes", () => {
     expect(String(result.message)).not.toContain("Cuidado com Perdemos torre");
   });
 
+  it("includes tactical plan context in coaching prompt", async () => {
+    const configMod = await import("../src/core/config.js");
+    const coachMod = await import("../src/core/coach.js");
+
+    configMod.settings.zaiApiKey = "test-key";
+    configMod.settings.zaiEndpoint = "https://api.example/v1/chat/completions";
+    configMod.settings.zaiModel = "glm-5";
+    configMod.settings.coachMessageMode = "serio";
+
+    const result = await coachMod.decideCoaching(
+      { activePlayerGold: 0, enemyPlayers: [], alliedPlayers: [] },
+      ["torre caiu no bot"],
+      {
+        objectiveStates: [],
+        tacticalPlan: {
+          intent: "prepare_objective",
+          priority: "high",
+          confidence: "confirmed",
+          summary: "Prepara dragão",
+          reasons: [
+            { kind: "objective", text: "Dragão nasce em 45s", confidence: "confirmed", weight: 10 },
+          ],
+          createdAtGameTimeSeconds: 300,
+        },
+      }
+    );
+
+    expect(result.prompt).toContain("Plano tatico atual");
+    expect(result.prompt).toContain("prepare_objective");
+    expect(result.prompt).toContain("Prepara dragão");
+  });
+
+  it("does not use fallback-only tactical plan as strategic context", async () => {
+    const configMod = await import("../src/core/config.js");
+    const coachMod = await import("../src/core/coach.js");
+
+    configMod.settings.zaiApiKey = "test-key";
+    configMod.settings.zaiEndpoint = "https://api.example/v1/chat/completions";
+    configMod.settings.zaiModel = "glm-5";
+    configMod.settings.coachMessageMode = "serio";
+
+    const result = await coachMod.decideCoaching(
+      { activePlayerGold: 0, enemyPlayers: [], alliedPlayers: [] },
+      [],
+      {
+        objectiveStates: [],
+        tacticalPlan: {
+          intent: "farm_safe",
+          priority: "low",
+          confidence: "unknown",
+          summary: "Farma seguro ate aparecer uma janela melhor.",
+          reasons: [
+            { kind: "fallback", text: "Sem sinal tatico forte", confidence: "unknown", weight: 1 },
+          ],
+          createdAtGameTimeSeconds: 300,
+        },
+      }
+    );
+
+    expect(result.skippedLlm).toBe(true);
+    expect(result.reason).toBe("sem contexto estratégico para LLM");
+    expect(result.prompt).toBe("");
+  });
+
+  it("does not include fallback-only tactical plan in prompt when other context triggers LLM", async () => {
+    const configMod = await import("../src/core/config.js");
+    const coachMod = await import("../src/core/coach.js");
+
+    configMod.settings.zaiApiKey = "test-key";
+    configMod.settings.zaiEndpoint = "https://api.example/v1/chat/completions";
+    configMod.settings.zaiModel = "glm-5";
+    configMod.settings.coachMessageMode = "serio";
+
+    const result = await coachMod.decideCoaching(
+      { activePlayerGold: 0, enemyPlayers: [], alliedPlayers: [] },
+      ["torre caiu no bot"],
+      {
+        objectiveStates: [],
+        tacticalPlan: {
+          intent: "farm_safe",
+          priority: "low",
+          confidence: "unknown",
+          summary: "Farma seguro ate aparecer uma janela melhor.",
+          reasons: [
+            { kind: "fallback", text: "Sem sinal tatico forte", confidence: "unknown", weight: 1 },
+          ],
+          createdAtGameTimeSeconds: 300,
+        },
+      }
+    );
+
+    expect(result.skippedLlm).toBe(false);
+    expect(result.prompt).not.toContain("Plano tatico atual");
+    expect(result.prompt).not.toContain("Farma seguro ate aparecer uma janela melhor.");
+    expect(result.prompt).not.toContain("Intent: farm_safe");
+  });
+
   it("system prompt includes anti-generic rules", async () => {
     const { buildSystemPrompt } = await import("../src/core/constants.js");
     const prompt = buildSystemPrompt("serio");
     expect(prompt).toContain("Sempre mencione pelo menos um campeão");
     expect(prompt).toContain("NUNCA dê conselhos genéricos");
+  });
+
+  it("system prompt allows objective calls from deterministic tactical plans", async () => {
+    const { buildSystemPrompt } = await import("../src/core/constants.js");
+    const prompt = buildSystemPrompt("serio");
+    expect(prompt).toContain("Só mencione dragão/barão/arauto se estiver 'disponível' nos Objetivos ou se o Plano tatico atual pedir prepare_objective/trade_objective");
   });
 
   it("matchup prompt includes lane opponent rules", async () => {

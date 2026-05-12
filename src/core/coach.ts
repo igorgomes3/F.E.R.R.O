@@ -403,6 +403,29 @@ function compactPlayer(player: SnapshotPlayer): string {
   return `${player.championName}(${player.kills}/${player.deaths}/${player.assists},nv${player.level})`;
 }
 
+function formatTacticalPlan(plan: StrategicContext["tacticalPlan"]): string[] {
+  if (!plan || !hasNonFallbackTacticalPlan(plan)) return [];
+
+  const reasons = plan.reasons.map((reason) =>
+    `${reason.kind}: ${reason.text} (${reason.confidence}, peso ${reason.weight})`
+  );
+
+  return [
+    "Plano tatico atual:",
+    `Intent: ${plan.intent}`,
+    `Prioridade: ${plan.priority}`,
+    `Confianca: ${plan.confidence}`,
+    `Resumo: ${plan.summary}`,
+    reasons.length > 0 ? `Razoes: ${reasons.join(" | ")}` : "Razoes: nenhuma",
+    "Use este plano como fonte da verdade. Nao contradiga o intent; apenas explique ou compacte a call.",
+  ];
+}
+
+function hasNonFallbackTacticalPlan(plan: StrategicContext["tacticalPlan"]): boolean {
+  if (!plan) return false;
+  return plan.intent !== "farm_safe" || plan.reasons.some((reason) => reason.kind !== "fallback");
+}
+
 function buildPrompt(
   snapshot: GameSnapshot,
   triggers: string[],
@@ -447,6 +470,8 @@ function buildPrompt(
     lines.push(`Memoria tatica: ${strategicContext.tacticalMemory}`);
   }
 
+  lines.push(...formatTacticalPlan(strategicContext?.tacticalPlan));
+
   return lines.join("\n");
 }
 
@@ -480,6 +505,7 @@ export async function decideCoaching(
     priority !== null ||
     triggers.length > 0 ||
     Boolean(strategicContext?.tacticalMemory) ||
+    hasNonFallbackTacticalPlan(strategicContext?.tacticalPlan) ||
     strategicContext?.objectiveStates?.some((o) => o.available);
 
   if (!hasStrategicContext) {

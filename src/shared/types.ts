@@ -46,6 +46,7 @@ export interface EngineState {
 
 export type EngineEventType =
   | "status_change"
+  | "state_update"
   | "game_detected"
   | "game_ended"
   | "coaching"

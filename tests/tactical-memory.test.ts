@@ -757,6 +757,37 @@ describe("Engine tactical memory", () => {
     engine.stop();
   });
 
+  it("emits an engine event after updating the current tactical plan on quiet ticks", async () => {
+    const analyzer = await import("../src/core/analyzer.js");
+    const { Engine } = await import("../src/main/services/engine.js");
+    const engine = new Engine();
+    const events: Array<{ type: string }> = [];
+    engine.on("event", (event: { type: string }) => events.push(event));
+    await engine.start();
+    if ((engine as unknown as { intervalId: ReturnType<typeof setInterval> | null }).intervalId) {
+      clearInterval((engine as unknown as { intervalId: ReturnType<typeof setInterval> | null }).intervalId as ReturnType<typeof setInterval>);
+      (engine as unknown as { intervalId: ReturnType<typeof setInterval> | null }).intervalId = null;
+    }
+
+    vi.mocked(analyzer.analyzeSnapshot).mockResolvedValueOnce({
+      triggers: [],
+      strategicContext: {
+        objectiveStates: [{ name: "dragon", spawnIn: "30 segundos", available: false }],
+        enemyThreat: null,
+        enemyThreats: [],
+        alliedPower: 4,
+        enemyPower: 4,
+      },
+    } as Awaited<ReturnType<typeof analyzer.analyzeSnapshot>>);
+
+    currentSnapshot = makeSnapshot(300);
+    events.length = 0;
+    await (engine as unknown as { tick: () => Promise<void> }).tick();
+
+    expect(events).toContainEqual(expect.objectContaining({ type: "state_update" }));
+    engine.stop();
+  });
+
   it("passes latest enemy snapshot context into tactical ultimate estimates", async () => {
     const { Engine } = await import("../src/main/services/engine.js");
     const engine = new Engine();

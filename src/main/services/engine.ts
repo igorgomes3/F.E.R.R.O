@@ -420,6 +420,7 @@ export class Engine extends EventEmitter {
     if (!this.isRunActive(runToken)) return;
     const currentTacticalPlan = createTacticalPlan(this.buildTacticalPlanInput(snapshot, strategicContext));
     this.engineState.currentTacticalPlan = currentTacticalPlan;
+    this.send({ type: "state_update" });
     const pending = st.drainPendingTriggers();
     const triggers = sortTriggersByUrgency([...new Set([...pending, ...newTriggers])]);
     const dueForCoaching = gameTime - (st.lastCoachingAt || 0) >= c.settings.coachingIntervalSeconds;
@@ -454,9 +455,11 @@ export class Engine extends EventEmitter {
         c.settings.zaiApiKey = "";
       }
       const tacticalMemory = this.tacticalMemory.formatCoachContext(gameTime);
-      const coachStrategicContext = tacticalMemory
-        ? { ...strategicContext, tacticalMemory }
-        : strategicContext;
+      const coachStrategicContext: StrategicContext = {
+        ...strategicContext,
+        ...(tacticalMemory ? { tacticalMemory } : {}),
+        ...(this.engineState.currentTacticalPlan ? { tacticalPlan: this.engineState.currentTacticalPlan } : {}),
+      };
       decision = await c.decideCoaching(snapshot, triggers, coachStrategicContext);
       if (!this.isRunActive(runToken)) return;
       this.engineState.llmStatus = llmEnabled ? "idle" : "disabled";

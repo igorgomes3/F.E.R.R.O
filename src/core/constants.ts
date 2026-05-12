@@ -24,7 +24,7 @@ const SYSTEM_PROMPT_FIXED_RULES = [
   "- Acentuação correta (dragão, barão, você, está).",
   "- Sem markdown, emojis, listas ou abreviações.",
   "- NUNCA sugira ir atrás de um objetivo que está morto ou em cooldown.",
-  "- Só mencione dragão/barão/arauto se estiver 'disponível' nos Objetivos.",
+  "- Só mencione dragão/barão/arauto se estiver 'disponível' nos Objetivos ou se o Plano tatico atual pedir prepare_objective/trade_objective.",
   "- Se não tiver nada útil, responda SILENCIO.",
   "- Sempre mencione pelo menos um campeão por nome na dica.",
   "- Sempre referencie um objetivo, lane ou situação específica do estado do jogo.",

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { EngineState } from "../../shared/types";
 import LogPanel from "../components/dashboard/LogPanel";
+import TacticalPlanPanel from "../components/dashboard/TacticalPlanPanel";
 import TacticalMemoryPanel from "../components/dashboard/TacticalMemoryPanel";
 import VoiceInputStatusPanel from "../components/dashboard/VoiceInputStatusPanel";
 
@@ -127,6 +128,10 @@ export default function Dashboard() {
           </p>
         </div>
       )}
+
+      <div className="animate-in animate-in-delay-4 relative z-10 mt-8 w-full max-w-lg">
+        <TacticalPlanPanel plan={engine.currentTacticalPlan} />
+      </div>
 
       {/* Tactical memory */}
       <div className="animate-in animate-in-delay-4 relative z-10 mt-8 w-full max-w-lg">
