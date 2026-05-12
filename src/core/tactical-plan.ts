@@ -18,6 +18,7 @@ export function createTacticalPlan(input: TacticalPlanInput): TacticalPlan {
 
   const objective = findSoonObjective(input.objectiveStates);
   if (objective) {
+    const cooldownReasons = collectEnemyCooldownReasons(input, gameTime);
     const reasons: TacticalPlanReason[] = [
       {
         kind: "objective",
@@ -25,11 +26,12 @@ export function createTacticalPlan(input: TacticalPlanInput): TacticalPlan {
         confidence: "estimated",
         weight: 4,
       },
+      ...cooldownReasons,
     ];
 
     return {
       intent: "prepare_objective",
-      priority: objective.available ? "high" : "medium",
+      priority: objective.available || score(cooldownReasons) >= 3 ? "high" : "medium",
       summary: `Prepara ${objective.name}: arruma visao e evita luta longa antes da contestacao.`,
       confidence: confidenceFromReasons(reasons),
       createdAtGameTimeSeconds: gameTime,
@@ -73,6 +75,18 @@ function collectAvoidFightReasons(input: TacticalPlanInput, gameTime: number): T
   }
 
   return reasons;
+}
+
+function collectEnemyCooldownReasons(input: TacticalPlanInput, gameTime: number): TacticalPlanReason[] {
+  return input.cooldowns
+    .filter((cooldown) => cooldown.isEnemy && cooldown.readyAtSeconds > gameTime && cooldown.confidence !== "expired")
+    .slice(0, 2)
+    .map((cooldown) => ({
+      kind: "cooldown" as const,
+      text: `${cooldown.champion} esta sem ${cooldown.spell}.`,
+      confidence: cooldown.confidence === "confirmed" ? "confirmed" : "estimated",
+      weight: cooldown.confidence === "confirmed" ? 3 : 2,
+    }));
 }
 
 function findSoonObjective(objectives: ObjectiveState[]): ObjectiveState | null {

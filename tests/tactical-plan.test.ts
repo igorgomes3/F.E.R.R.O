@@ -70,4 +70,19 @@ describe("tactical plan", () => {
       expect.objectContaining({ kind: "death", text: expect.stringContaining("Jinx") }),
     ]));
   });
+
+  it("uses confirmed enemy cooldowns to strengthen objective preparation", () => {
+    const plan = createTacticalPlan(baseInput({
+      gameTimeSeconds: 700,
+      objectiveStates: [{ name: "dragão", spawnIn: "30 segundos", available: false }],
+      cooldowns: [{ champion: "Ashe", spell: "flash", isEnemy: true, confidence: "confirmed", readyAtSeconds: 850 }],
+    }));
+
+    expect(plan.intent).toBe("prepare_objective");
+    expect(plan.priority).toBe("high");
+    expect(plan.reasons).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "cooldown", text: expect.stringContaining("Ashe") }),
+    ]));
+    expect(plan.confidence).toBe("estimated");
+  });
 });
